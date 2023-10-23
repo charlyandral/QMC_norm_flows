@@ -9,14 +9,14 @@ from flowMC.nfmodel.utils import *
 from flowMC.sampler.MALA import MALA
 from flowMC.sampler.Sampler import Sampler
 from flowMC.utils.PRNG_keys import initialize_rng_keys
-import scipy.stats as stats
+
 import pandas as pd
 from joblib import Parallel, delayed
 import seaborn as sns
 import scipy.stats.qmc as qmc
-from tqdm import tqdm
+
 jax.config.update("jax_enable_x64", True)
-import corner
+
 import matplotlib.pyplot as plt
 
 def cumulative_plot(samples, weights, x_arr, function):
@@ -308,51 +308,6 @@ class QMC_flow:
         return df_melt
 
     
-
-
-
-# %%
-
-n_dim = 10
-
-model = MaskedCouplingRQSpline(n_dim, 6, [32,32], 8, jax.random.PRNGKey(10))
-n_loop_training = 5
-
-
-@jax.jit
-def target_dualmoon(x, data=None):
-    """
-    Term 2 and 3 separate the distribution and smear it along the first and second dimension
-    """
-    term1 = 0.5 * ((jnp.linalg.norm(x) - 2) / 0.1) ** 2
-    terms = []
-    for i in range(n_dim):
-        terms.append(-0.5 * ((x[i : i + 1] + jnp.array([-3.0, 3.0])) / 0.6) ** 2)
-    return -(
-        term1 - sum([logsumexp(i) for i in terms])
-    )  # + jnp.log(jnp.abs(jnp.sin(x[0]*10)*(x[0]**4)))
-
-
-# def target_dualmoon(x, data):
-#     """
-#     Term 2 and 3 separate the distribution and smear it along the first and second dimension
-#     """
-#     #print("compile count")
-#     term1 = 0.5 * ((jnp.linalg.norm(x - data) - 2) / 0.1) ** 2
-#     term2 = -0.5 * ((x[:1] + jnp.array([-3.0, 3.0])) / 0.4) ** 2
-#     term3 = -0.5 * ((x[1:2] + jnp.array([-3.0, 3.0])) / 0.4) ** 2
-#     return -(term1 - logsumexp(term2) - logsumexp(term3)) #- jnp.log(jnp.abs(jnp.sin(x[0])*x[0]**2))
-
-
-sampler = QMC_flow(
-    n_dim,
-    target_dualmoon,
-    qmc.Sobol(d=n_dim),
-    seed_training_flow=0,
-    model=model,
-    n_loop_training=n_loop_training,
-)
-#sampler.trainning_flow()
 
 
 #%%

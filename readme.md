@@ -12,7 +12,19 @@ The code used to generate the figures are located in two folders, section 5.1 an
 
 ## Usage
 
-Examples of how to use the project.
+
+The code used to generate the figures are located in two folders, section 5.1 and section 5.2
+
+### Section 5.1
+All the code is in a single notebook, fab_gmm.ipynb
+
+### Section 5.2.1
+run.dim.py generates the dataframe with the raw date, analysis_dim.py runs the analysis from the dataframe
+
+### Section 5.2.2
+
+
+
 
 ## Contributing
 
