@@ -32,7 +32,3 @@ For this section, the dataframe used is the one generated in section 5.2.4. The 
 
 
 
-
-## Contributing
-
-Information for contributors or maintainers.
