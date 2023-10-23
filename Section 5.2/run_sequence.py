@@ -1,4 +1,4 @@
-# %%
+#%%
 from flowMC.sampler.MALA import MALA
 import jax
 import jax.numpy as jnp  # JAX NumPy
@@ -20,20 +20,6 @@ jax.config.update("jax_enable_x64", True)
 import corner
 import matplotlib.pyplot as plt
 
-
-# %load_ext scalene
-def cumulative_plot(samples, weights, x_arr, function):
-    """
-    Plot the cumulative mean of a function of the samples
-    """
-    out = []
-    for j in x_arr:
-        mean = jnp.average(a=function(samples[:j]), weights=weights[:j])
-        out.append(mean)
-    return out
-
-
-cumulative_plot_vmap = jax.vmap(cumulative_plot, in_axes=(0, 0, None, None))
 
 
 class QMC_flow:
@@ -209,7 +195,7 @@ class QMC_flow:
                 "dim": self.n_dim
             }
 
-        out = Parallel(n_jobs=n_jobs, backend="loky", verbose=10)(
+        out = Parallel(n_jobs=n_jobs, backend="threading", verbose=10)(
             delayed(loop)(i) for i in range(n_rep)
         )
         df = pd.DataFrame(out)
@@ -244,7 +230,7 @@ class QMC_flow:
     def make_simu(self,simulations):
         out = []
         for i in range(len(simulations)):
-            df = self.repeated_sampling_dim(**simulations[i])
+            df = self.repeated_sampling(**simulations[i])
             out.append(df)
         df_all = pd.concat(out)
         df_melt = pd.melt(
@@ -252,8 +238,8 @@ class QMC_flow:
             id_vars=["seed", "method"],
             value_vars=[f"mean_{i}" for i in range(self.n_dim)],
         )
-        sns.boxplot(x="variable", y="value", hue="method", data=df_melt)
-        plt.show()
+        #sns.boxplot(x="variable", y="value", hue="method", data=df_melt)
+        #plt.show()
         return df_all, df_melt
     
     def repeated_sampling_dim(
@@ -305,7 +291,7 @@ class QMC_flow:
         df_all = pd.concat(out)
         df_melt = pd.melt(
             df_all,
-            id_vars=["seed", "method","dim"],
+            id_vars=["seed", "method"],
             value_vars=[f"mean_{i}" for i in range(self.n_dim)]+[f"sin(x1)*x1^4"],
         )
         return df_melt
@@ -316,60 +302,46 @@ class QMC_flow:
 
 # %%
 
-n_size = 2**16
 n_dim = 2
-params = [(2,[8,8],4),(4,[16,16],8), (6,[32,32],8), (10,[32,32],12)]
-models_list =[]
-params_name = [num for _ in range(20) for num in params ]
-for i in range(20):
-    for n_layers, hidden_dim, n_bins in params:
-        models_list.append(MaskedCouplingRQSpline(n_dim, n_layers, hidden_dim, n_bins, jax.random.PRNGKey(i)))
-        
-#%%
-                
-    
-    
 
-n_rep = 50
+model = MaskedCouplingRQSpline(n_dim, 6, [32,32], 8, jax.random.PRNGKey(10))
+n_loop_training = 30
 
-out = []
 
-def loop(i):
-    model = models_list[i]
-    n_loop_training = 30
-    @jax.jit
-    def target_dualmoon(x, data=None):
-        """
-        Term 2 and 3 separate the distribution and smear it along the first and second dimension
-        """
-        term1 = 0.5 * ((jnp.linalg.norm(x) - 2) / 0.1) ** 2
-        terms = []
-        for i in range(n_dim):
-            terms.append(-0.5 * ((x[i : i + 1] + jnp.array([-3.0, 3.0])) / 0.6) ** 2)
-        return -(
-            term1 - sum([logsumexp(i) for i in terms])
-        )
-    sampler = QMC_flow(
+@jax.jit
+def target_dualmoon(x, data=None):
+    """
+    Term 2 and 3 separate the distribution and smear it along the first and second dimension
+    """
+    term1 = 0.5 * ((jnp.linalg.norm(x) - 2) / 0.1) ** 2
+    terms = []
+    for i in range(n_dim):
+        terms.append(-0.5 * ((x[i : i + 1] + jnp.array([-3.0, 3.0])) / 0.6) ** 2)
+    return -(
+        term1 - sum([logsumexp(i) for i in terms])
+    )  
+sampler = QMC_flow(
     n_dim,
     target_dualmoon,
     qmc.Sobol(d=n_dim),
-    seed_training_flow=i,
+    seed_training_flow=1,
     model=model,
     n_loop_training=n_loop_training,
-    )
-    sampler.trainning_flow()
-    common_dict = {"n_sample": n_size, "n_rep": n_rep, "seed": 10000 * (i+1), "n_jobs": 4}
-    simulations = [
-        common_dict | {"type_mc": "MC"},
-        common_dict | {"type_mc": "QMC", "QMC_engine": qmc.Sobol, "inv_transform": True}]
-    df_melt = sampler.make_simu_dim(simulations)
-    loss = sampler.nf_sampler.get_sampler_state(training=True)["loss_vals"].reshape(-1)[-1]
-    
-    df_melt["archi"] = str(params_name[i])
-    df_melt["loss"] = float(loss)
-    return df_melt
-out  = Parallel(n_jobs=10, backend="threading", verbose=10)(
-            delayed(loop)(i) for i in range(len(models_list))
-        )
-df_melt = pd.concat(out)
-df_melt.to_pickle("all_archi_test_clust_2.zip")
+)
+sampler.trainning_flow()
+
+
+
+n_size = 2**17
+n_rep = 100
+common_dict = {"n_sample": n_size, "n_rep": n_rep, "seed": 12, "n_jobs": 40}
+simulations = [
+    common_dict | {"type_mc": "MC"},
+    common_dict | {"type_mc": "QMC", "QMC_engine": qmc.Sobol, "inv_transform": True},
+  common_dict | {"type_mc": "QMC", "QMC_engine": qmc.Sobol, "inv_transform":False},
+  common_dict | {"type_mc": "QMC", "QMC_engine": qmc.Halton, "inv_transform":True},
+  common_dict | {"type_mc": "QMC", "QMC_engine": qmc.Halton, "inv_transform":False}]
+plt.show()
+plt.figure()
+df_all,_= sampler.make_simu(simulations)
+df_all.to_pickle("archi_test.zip")
